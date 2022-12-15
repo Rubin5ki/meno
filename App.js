@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, Button, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, View, Button,SafeAreaView, TouchableOpacity } from 'react-native';
 import { useEffect, useState, useRef } from 'react';
 import { Camera } from 'expo-camera';
 import { Video } from 'expo-av';
@@ -12,24 +12,57 @@ export default function App() {
   const [hasMediaLibraryPermission, setHasMediaLibraryPermission] = useState();
   const [isRecording, setIsRecording] = useState(false);
   const [video, setVideo] = useState();
+  const [isFlashEnabled, setIsFlashEnabled] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [cameraType, setCameraType] = useState(Camera.Constants.Type.back);
 
   useEffect(() => {
     (async () => {
       const cameraPermission = await Camera.requestCameraPermissionsAsync();
       const microphonePermission = await Camera.requestMicrophonePermissionsAsync();
       const mediaLibraryPermission = await MediaLibrary.requestPermissionsAsync();
-
+    
       setHasCameraPermission(cameraPermission.status === "granted");
       setHasMicrophonePermission(microphonePermission.status === "granted");
       setHasMediaLibraryPermission(mediaLibraryPermission.status === "granted");
     })();
   }, []);
 
+
+  let handleFocusChanged = ({ isFocused }) => {
+    setIsFocused(isFocused);
+  };
+
+  let switchCameraType = () => {
+    if (cameraType === cameraRef.Constants.Type.back) {
+      setCameraType(cameraRef.Constants.Type.front);
+    } else {
+      setCameraType(cameraRef.Constants.Type.back);
+    }
+  }
+
+  let  handleTouch = () => {
+    if (isFocused) {
+      setIsFocused(false);
+    } else {
+      setIsFocused(true);
+    }
+  };
+
   if (hasCameraPermission === undefined || hasMicrophonePermission === undefined) {
     return <Text>Requestion permissions...</Text>
   } else if (!hasCameraPermission) {
     return <Text>Permission for camera not granted.</Text>
   }
+
+  
+
+  let toggleFlash = () => {
+    setIsFlashEnabled(!isFlashEnabled);
+    cameraRef.current.setIsFlashEnabled(true);
+  };
+
+
 
   let recordVideo = () => {
     setIsRecording(true);
@@ -42,6 +75,8 @@ export default function App() {
     cameraRef.current.recordAsync(options).then((recordedVideo) => {
       setVideo(recordedVideo);
       setIsRecording(false);
+      onFocusChanged={handleFocusChanged}
+      onTouch={handleTouch}
     });
   };
 
@@ -83,8 +118,11 @@ export default function App() {
     <Camera style={styles.container} ref={cameraRef}>
       <View style={styles.buttonContainer}>
         <Button title={isRecording ? "Stop Recording" : "Record Video"} onPress={isRecording ? stopRecording : recordVideo} />
+        <Button title={isFlashEnabled ? "Disable" : "Enable"} onPress={toggleFlash} />
+        <Button title={"X"} onPress={switchCameraType}/>
       </View>
     </Camera>
+
   );
 }
 
