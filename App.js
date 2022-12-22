@@ -1,105 +1,172 @@
-import { StyleSheet, Text, View, Button, SafeAreaView } from 'react-native';
-import { useEffect, useState, useRef } from 'react';
-import { Camera } from 'expo-camera';
-import { Video } from 'expo-av';
-import { shareAsync } from 'expo-sharing';
+import { AutoFocus, Camera, CameraType, FlashMode } from 'expo-camera';
+import { useRef, useState, useEffect, toSTring } from 'react';
+import { StyleSheet, View, Text, Button, Alert } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
+import CaptureButton from "./src/components/CaptureButton";
+import IconButton from './src/components/IconButton';
+import Counter from './src/components/Counter';
+import TopContainer from './src/containers/TopContainer';
+import BottomContainer from './src/containers/BottomContainer';
+import BodyContainer from './src/containers/BodyContainer';
+import SongCard from './src/components/SongCard';
+import { StatusBar } from "expo-status-bar";
 
 export default function App() {
-  let cameraRef = useRef();
+
+  const [type, setType] = useState(CameraType.back);
+  const [flashMode, setFlashMode] = useState(FlashMode.off);
+  const [autofocus, setAutoFocus] = useState(AutoFocus.off);
+  const [zoom, setZoom] = useState(Camera.zoom = 0);
+  const [recoding, setIsRecording] = useState(false);
+  const ref = useRef(null);
+
+  const [count, setCount] = useState(20);
+
+  const [video, setVideo] = useState();
+
+
   const [hasCameraPermission, setHasCameraPermission] = useState();
   const [hasMicrophonePermission, setHasMicrophonePermission] = useState();
   const [hasMediaLibraryPermission, setHasMediaLibraryPermission] = useState();
-  const [isRecording, setIsRecording] = useState(false);
-  const [video, setVideo] = useState();
+
+
 
   useEffect(() => {
     (async () => {
       const cameraPermission = await Camera.requestCameraPermissionsAsync();
       const microphonePermission = await Camera.requestMicrophonePermissionsAsync();
       const mediaLibraryPermission = await MediaLibrary.requestPermissionsAsync();
-
+    
       setHasCameraPermission(cameraPermission.status === "granted");
       setHasMicrophonePermission(microphonePermission.status === "granted");
       setHasMediaLibraryPermission(mediaLibraryPermission.status === "granted");
     })();
   }, []);
 
-  if (hasCameraPermission === undefined || hasMicrophonePermission === undefined) {
-    return <Text>Requestion permissions...</Text>
-  } else if (!hasCameraPermission) {
-    return <Text>Permission for camera not granted.</Text>
-  }
 
-  let recordVideo = () => {
-    setIsRecording(true);
-    let options = {
-      quality: "1080p",
-      maxDuration: 15,
-      mute: false
-    };
-
-    cameraRef.current.recordAsync(options).then((recordedVideo) => {
-      setVideo(recordedVideo);
-      setIsRecording(false);
-    });
-  };
-
-  let stopRecording = () => {
-    setIsRecording(false);
-    cameraRef.current.stopRecording();
-  };
-
-  if (video) {
-    let shareVideo = () => {
-      shareAsync(video.uri).then(() => {
-        setVideo(undefined);
+useEffect(() => {
+    const interval = setInterval(() => {
+      setCount((prevCount) => {
+        if (prevCount === 0 && !recoding) {
+          stopRecording();
+          setCount(1000)
+        }
+        return prevCount - 1;
       });
-    };
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-    let saveVideo = () => {
-      MediaLibrary.saveToLibraryAsync(video.uri).then(() => {
-        setVideo(undefined);
-      });
-    };
-
-    return (
-      <SafeAreaView style={styles.container}>
-        <Video
-          style={styles.video}
-          source={{uri: video.uri}}
-          useNativeControls
-          resizeMode='contain'
-          isLooping
-        />
-        <Button title="Share" onPress={shareVideo} />
-        {hasMediaLibraryPermission ? <Button title="Save" onPress={saveVideo} /> : undefined}
-        <Button title="Discard" onPress={() => setVideo(undefined)} />
-      </SafeAreaView>
+  function showAlert() {
+    Alert.alert(
+      'Are you sure?',
+      'Do you want to save that masterpiec?',
+      [
+        {
+          text: 'Save',
+          onPress: () => saveVideo() | console.log('Yes pressed')
+        },
+        {
+          text: 'Redo',
+          onPress: () => console.log('No pressed'),
+          style: 'cancel'
+        }
+      ]
     );
   }
 
+  async function toggleCameraType() {
+    setType(current => (current === CameraType.back ? CameraType.front : CameraType.back));
+  }
+
+  function toggleFlash() {
+    setFlashMode(current => (current === FlashMode.off ? FlashMode.torch : FlashMode.off));
+  }
+
+  function toggleAutofocus() {
+    setAutoFocus(current => (current === AutoFocus.off ? AutoFocus.on : AutoFocus.off));
+  }
+
+  function zoomCameraIn() {
+    setZoom(current => (current + 0.05 < 1 ? Camera.zoom += 0.05 : Camera.zoom = 0));
+    console.log(Camera.zoom)
+  }
+
+  function zoomCameraOut() {
+    setZoom(current => (current - 0.05 > 1 ? Camera.zoom -=0.05 : Camera.zoom = 0));
+    console.log(Camera.zoom)
+  }
+
+
+   function recordVideo() {
+    setIsRecording(true);
+    setCount(20)
+    let options = {
+      quality: "1080p",
+      mute: false
+    };
+
+    ref.current.recordAsync(options).then((recordedVideo) => {
+      setVideo(recordedVideo);
+      setIsRecording(false);
+      console.log(video.uri)
+    });
+  };
+
+
+   async function stopRecording(){
+    try{
+      ref.current.stopRecording();
+      setIsRecording(false)
+      console.log(video)
+    }catch (error) {
+      console.error(error);
+    }
+    showAlert();
+  }
+
+  async function saveVideo() {
+    MediaLibrary.saveToLibraryAsync(video.uri).then(() => {
+      setVideo(undefined);
+    });
+
+  }
+
+
   return (
-    <Camera style={styles.container} ref={cameraRef}>
-      <View style={styles.buttonContainer}>
-        <Button title={isRecording ? "Stop Recording" : "Record Video"} onPress={isRecording ? stopRecording : recordVideo} />
-      </View>
-    </Camera>
+    <View style={styles.container}>
+      <Camera style={styles.camera} type={type} flashMode={flashMode} ref={ref} autoFocus={autofocus} zoom={zoom} >
+        <StatusBar hidden={true} />
+        <TopContainer>
+        <IconButton icon={flashMode == FlashMode.off ? "flash-off-outline" : "flash-outline"} onPress={toggleFlash} size="35" color="white" />
+        <IconButton icon="aperture-outline" onPress={toggleAutofocus} size="35" color="white"/>
+        <IconButton icon="sync-outline" onPress={toggleCameraType} size="35" color="white"/>
+        </TopContainer>
+
+        <BodyContainer> 
+        <Counter counter={recoding == true ? count : "20"}/>
+        </BodyContainer>
+      
+        <BottomContainer>
+        <IconButton icon="add-circle-outline" onPress={zoomCameraIn} size="35" color="white" />
+        <CaptureButton  color={recoding == true ? "#bf244b" : "#fff"} onPress={recoding == false ? recordVideo : stopRecording}/>
+        <IconButton icon="remove-circle-outline" onPress={zoomCameraOut} size="35" color="white"/>
+        </BottomContainer>
+
+      </Camera>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonContainer: {
-    backgroundColor: "#fff",
-    alignSelf: "flex-end"
-  },
-  video: {
+  camera: {
     flex: 1,
-    alignSelf: "stretch"
-  }
+  },
+
 });
+
